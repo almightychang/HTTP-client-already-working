@@ -1,0 +1,1468 @@
+ARM GAS  /tmp/cc22phhs.s 			page 1
+
+
+   1              		.cpu cortex-m7
+   2              		.arch armv7e-m
+   3              		.fpu fpv5-sp-d16
+   4              		.eabi_attribute 27, 1
+   5              		.eabi_attribute 28, 1
+   6              		.eabi_attribute 20, 1
+   7              		.eabi_attribute 21, 1
+   8              		.eabi_attribute 23, 3
+   9              		.eabi_attribute 24, 1
+  10              		.eabi_attribute 25, 1
+  11              		.eabi_attribute 26, 1
+  12              		.eabi_attribute 30, 1
+  13              		.eabi_attribute 34, 1
+  14              		.eabi_attribute 18, 4
+  15              		.file	"tcp_restclient.c"
+  16              		.text
+  17              	.Ltext0:
+  18              		.cfi_sections	.debug_frame
+  19              		.section	.text.tcp_restclient_connection_close,"ax",%progbits
+  20              		.align	1
+  21              		.syntax unified
+  22              		.thumb
+  23              		.thumb_func
+  25              	tcp_restclient_connection_close:
+  26              	.LVL0:
+  27              	.LFB170:
+  28              		.file 1 "STM32LIB-LwIP-RESTclient/tcp_restclient.c"
+   1:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** #include "tcp_restclient.h"
+   2:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+   3:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** __IO uint32_t message_count=0;
+   4:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+   5:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** /* ECHO protocol states */
+   6:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** enum tcpclient_states
+   7:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+   8:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     TS_NOT_CONNECTED = 0,
+   9:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     TS_CONNECTED,
+  10:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     TS_RECEIVED,
+  11:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     TS_CLOSING
+  12:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** };
+  13:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  14:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** /* structure to be passed as argument to the tcp callbacks */
+  15:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** struct tcpclient {
+  16:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     u8_t state; /* connection status */
+  17:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     u8_t retries;
+  18:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcp_pcb *pcb;          /* pointer on the current tcp_pcb */
+  19:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct pbuf *p;            /* pointer on pbuf to be transmitted */
+  20:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** };
+  21:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  22:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** struct tcpclient *tsTx = 0;
+  23:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** struct tcp_pcb *pcbTx = 0;
+  24:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  25:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** /* Private function prototypes -----------------------------------------------*/
+  26:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static err_t tcp_restclient_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
+  27:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static void tcp_restclient_connection_close(struct tcp_pcb *tpcb, struct tcpclient * es);
+  28:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static err_t tcp_restclient_poll(void *arg, struct tcp_pcb *tpcb);
+  29:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static err_t tcp_restclient_sent(void *arg, struct tcp_pcb *tpcb, u16_t len);
+  30:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static void tcp_restclient_send(struct tcp_pcb *tpcb, struct tcpclient * es);
+ARM GAS  /tmp/cc22phhs.s 			page 2
+
+
+  31:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static err_t tcp_restclient_connected(void *arg, struct tcp_pcb *tpcb, err_t err);
+  32:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  33:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** err_t tcp_restclient_connect(void)
+  34:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+  35:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ip_addr_t DestIPaddr;
+  36:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcp_pcb *tcp_pcb = tcp_new();
+  37:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  38:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     if( tcp_pcb != NULL )
+  39:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+  40:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         IP4_ADDR( &DestIPaddr, DEST_IP_ADDR0, DEST_IP_ADDR1, DEST_IP_ADDR2, DEST_IP_ADDR3 );
+  41:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         return tcp_connect(tcp_pcb, &DestIPaddr, DEST_PORT, tcp_restclient_connected);
+  42:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+  43:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+  44:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  45:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static err_t tcp_restclient_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
+  46:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+  47:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts = NULL;
+  48:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  49:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* close connection */
+  50:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     if( err != ERR_OK ) tcp_restclient_connection_close(tpcb, ts);
+  51:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  52:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* allocate structure ts to maintain tcp connection informations */
+  53:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts = (struct tcpclient *)mem_malloc(sizeof(struct tcpclient));
+  54:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  55:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* TODO: FOR DEBUGGING */
+  56:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     u8_t   data[200];
+  57:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     //sprintf((char*)data, "sending tcp client message %d", (int)message_count);
+  58:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     sprintf((char*)data, HTTPC_REQ_11);
+  59:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts->p = pbuf_alloc(PBUF_TRANSPORT, strlen((char*)data) , PBUF_POOL);
+  60:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     pbuf_take(ts->p, (char*)data, strlen((char*)data));
+  61:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  62:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     if( ts == NULL )
+  63:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+  64:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* close connection */
+  65:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_restclient_connection_close(tpcb, ts);
+  66:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  67:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* return memory allocation error */
+  68:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         return ERR_MEM;  
+  69:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+  70:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  71:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts->state = TS_CONNECTED;
+  72:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts->pcb = tpcb;
+  73:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  74:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* pass newly allocated es structure as argument to tpcb */
+  75:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_arg(tpcb, ts);
+  76:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  77:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* initialize LwIP tcp_recv callback function */ 
+  78:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_recv(tpcb, tcp_restclient_recv);
+  79:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  80:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* initialize LwIP tcp_sent callback function */
+  81:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_sent(tpcb, tcp_restclient_sent);
+  82:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  83:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* initialize LwIP tcp_poll callback function */
+  84:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_poll(tpcb, tcp_restclient_poll, 1);
+  85:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  86:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* send data */
+  87:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_restclient_send(tpcb, ts); //TODO: delte
+ARM GAS  /tmp/cc22phhs.s 			page 3
+
+
+  88:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  89:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     return ERR_OK;
+  90:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+  91:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  92:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static err_t tcp_restclient_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+  93:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+  94:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts;
+  95:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     err_t ret_err;
+  96:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     LWIP_ASSERT("arg != NULL",arg != NULL);
+  98:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+  99:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts = (struct tcpclient *)arg;
+ 100:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 101:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* if we receive an empty tcp frame from server => close connection */
+ 102:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     if (p == NULL)
+ 103:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 104:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* remote host closed connection */
+ 105:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ts->state = TS_CLOSING;
+ 106:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         if(ts->p == NULL)
+ 107:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 108:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* we're done sending, close connection */
+ 109:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             tcp_restclient_connection_close(tpcb, ts);
+ 110:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 111:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         else
+ 112:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {    
+ 113:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* do nothing */
+ 114:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 115:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = ERR_OK;
+ 116:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }   
+ 117:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* else : a non empty frame was received from echo server but for some reason err != ERR_OK */
+ 118:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     else if(err != ERR_OK)
+ 119:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 120:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* free received pbuf*/
+ 121:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         if (p != NULL)
+ 122:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 123:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             ts->p = NULL;
+ 124:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             pbuf_free(p);
+ 125:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 126:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = err;
+ 127:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 128:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     else if(ts->state == TS_CONNECTED)
+ 129:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 130:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ts->p = p;
+ 131:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 132:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* Increment message count */
+ 133:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         message_count++;
+ 134:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 135:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* Acknowledge data reception */
+ 136:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_recved(tpcb, p->tot_len);  
+ 137:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 138:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* Handle received data */
+ 139:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         // tcp_restclient_handle(tpcb, ts);
+ 140:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 141:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* store Tx framework */
+ 142:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 	    tsTx = ts; //TODO
+ 143:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 	    pcbTx = tpcb; //TODO
+ 144:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ARM GAS  /tmp/cc22phhs.s 			page 4
+
+
+ 145:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         pbuf_free(p);
+ 146:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 147:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = ERR_OK;
+ 148:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 149:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* data received when connection already closed */
+ 150:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     else
+ 151:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 152:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* Acknowledge data reception */
+ 153:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_recved(tpcb, p->tot_len);
+ 154:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 155:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* free pbuf and do nothing */
+ 156:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         pbuf_free(p);
+ 157:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = ERR_OK;
+ 158:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 159:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     return ret_err;
+ 160:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 161:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 162:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static void tcp_restclient_connection_close(struct tcp_pcb *tpcb, struct tcpclient * ts)
+ 163:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+  29              		.loc 1 163 1 view -0
+  30              		.cfi_startproc
+  31              		@ args = 0, pretend = 0, frame = 0
+  32              		@ frame_needed = 0, uses_anonymous_args = 0
+  33              		.loc 1 163 1 is_stmt 0 view .LVU1
+  34 0000 38B5     		push	{r3, r4, r5, lr}
+  35              	.LCFI0:
+  36              		.cfi_def_cfa_offset 16
+  37              		.cfi_offset 3, -16
+  38              		.cfi_offset 4, -12
+  39              		.cfi_offset 5, -8
+  40              		.cfi_offset 14, -4
+  41 0002 0446     		mov	r4, r0
+  42 0004 0D46     		mov	r5, r1
+ 164:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* remove all callbacks */
+ 165:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_arg(tpcb, NULL);
+  43              		.loc 1 165 5 is_stmt 1 view .LVU2
+  44 0006 0021     		movs	r1, #0
+  45              	.LVL1:
+  46              		.loc 1 165 5 is_stmt 0 view .LVU3
+  47 0008 FFF7FEFF 		bl	tcp_arg
+  48              	.LVL2:
+ 166:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_sent(tpcb, NULL);
+  49              		.loc 1 166 5 is_stmt 1 view .LVU4
+  50 000c 0021     		movs	r1, #0
+  51 000e 2046     		mov	r0, r4
+  52 0010 FFF7FEFF 		bl	tcp_sent
+  53              	.LVL3:
+ 167:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_recv(tpcb, NULL);
+  54              		.loc 1 167 5 view .LVU5
+  55 0014 0021     		movs	r1, #0
+  56 0016 2046     		mov	r0, r4
+  57 0018 FFF7FEFF 		bl	tcp_recv
+  58              	.LVL4:
+ 168:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_err(tpcb, NULL);
+  59              		.loc 1 168 5 view .LVU6
+  60 001c 0021     		movs	r1, #0
+  61 001e 2046     		mov	r0, r4
+ARM GAS  /tmp/cc22phhs.s 			page 5
+
+
+  62 0020 FFF7FEFF 		bl	tcp_err
+  63              	.LVL5:
+ 169:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_poll(tpcb, NULL, 0);
+  64              		.loc 1 169 5 view .LVU7
+  65 0024 0022     		movs	r2, #0
+  66 0026 1146     		mov	r1, r2
+  67 0028 2046     		mov	r0, r4
+  68 002a FFF7FEFF 		bl	tcp_poll
+  69              	.LVL6:
+ 170:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 171:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* delete es structure */
+ 172:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     if (ts != NULL)
+  70              		.loc 1 172 5 view .LVU8
+  71              		.loc 1 172 8 is_stmt 0 view .LVU9
+  72 002e 15B1     		cbz	r5, .L2
+ 173:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 174:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         mem_free(ts);
+  73              		.loc 1 174 9 is_stmt 1 view .LVU10
+  74 0030 2846     		mov	r0, r5
+  75 0032 FFF7FEFF 		bl	mem_free
+  76              	.LVL7:
+  77              	.L2:
+ 175:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 176:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 177:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     /* close tcp connection */
+ 178:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     tcp_close(tpcb);
+  78              		.loc 1 178 5 view .LVU11
+  79 0036 2046     		mov	r0, r4
+  80 0038 FFF7FEFF 		bl	tcp_close
+  81              	.LVL8:
+ 179:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+  82              		.loc 1 179 1 is_stmt 0 view .LVU12
+  83 003c 38BD     		pop	{r3, r4, r5, pc}
+  84              		.loc 1 179 1 view .LVU13
+  85              		.cfi_endproc
+  86              	.LFE170:
+  88              		.section	.text.tcp_restclient_poll,"ax",%progbits
+  89              		.align	1
+  90              		.syntax unified
+  91              		.thumb
+  92              		.thumb_func
+  94              	tcp_restclient_poll:
+  95              	.LVL9:
+  96              	.LFB171:
+ 180:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 181:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static err_t tcp_restclient_poll(void *arg, struct tcp_pcb *tpcb)
+ 182:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+  97              		.loc 1 182 1 is_stmt 1 view -0
+  98              		.cfi_startproc
+  99              		@ args = 0, pretend = 0, frame = 0
+ 100              		@ frame_needed = 0, uses_anonymous_args = 0
+ 101              		.loc 1 182 1 is_stmt 0 view .LVU15
+ 102 0000 08B5     		push	{r3, lr}
+ 103              	.LCFI1:
+ 104              		.cfi_def_cfa_offset 8
+ 105              		.cfi_offset 3, -8
+ 106              		.cfi_offset 14, -4
+ARM GAS  /tmp/cc22phhs.s 			page 6
+
+
+ 107 0002 0B46     		mov	r3, r1
+ 183:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     err_t ret_err;
+ 108              		.loc 1 183 5 is_stmt 1 view .LVU16
+ 184:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts;
+ 109              		.loc 1 184 5 view .LVU17
+ 185:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 186:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts = (struct tcpclient *)arg;
+ 110              		.loc 1 186 5 view .LVU18
+ 111              	.LVL10:
+ 187:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     if (ts != NULL)
+ 112              		.loc 1 187 5 view .LVU19
+ 113              		.loc 1 187 8 is_stmt 0 view .LVU20
+ 114 0004 70B1     		cbz	r0, .L5
+ 115 0006 0146     		mov	r1, r0
+ 116              	.LVL11:
+ 188:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 189:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         if (ts->p != NULL)
+ 117              		.loc 1 189 9 is_stmt 1 view .LVU21
+ 118              		.loc 1 189 15 is_stmt 0 view .LVU22
+ 119 0008 8268     		ldr	r2, [r0, #8]
+ 120              		.loc 1 189 12 view .LVU23
+ 121 000a 0AB1     		cbz	r2, .L10
+ 190:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 191:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             // tcp_sent(tpcb, tcp_restclient_sent);
+ 192:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* there is a remaining pbuf (chain) , try to send data */
+ 193:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             // tcp_restclient_send(tpcb, es);
+ 194:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 195:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         else
+ 196:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 197:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* no remaining pbuf (chain)  */
+ 198:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             if(ts->state == TS_CLOSING)
+ 199:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             {
+ 200:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****                 /*  close tcp connection */
+ 201:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****                 tcp_restclient_connection_close(tpcb, ts);
+ 202:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             }
+ 203:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 204:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = ERR_OK;
+ 122              		.loc 1 204 17 view .LVU24
+ 123 000c 0020     		movs	r0, #0
+ 124              	.LVL12:
+ 125              	.L6:
+ 205:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 206:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     else
+ 207:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 208:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* nothing to be done */
+ 209:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_abort(tpcb);
+ 210:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = ERR_ABRT;
+ 211:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 212:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     return ret_err;
+ 126              		.loc 1 212 5 is_stmt 1 view .LVU25
+ 213:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 127              		.loc 1 213 1 is_stmt 0 view .LVU26
+ 128 000e 08BD     		pop	{r3, pc}
+ 129              	.LVL13:
+ 130              	.L10:
+ 198:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             {
+ 131              		.loc 1 198 13 is_stmt 1 view .LVU27
+ARM GAS  /tmp/cc22phhs.s 			page 7
+
+
+ 198:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             {
+ 132              		.loc 1 198 18 is_stmt 0 view .LVU28
+ 133 0010 0278     		ldrb	r2, [r0]	@ zero_extendqisi2
+ 198:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             {
+ 134              		.loc 1 198 15 view .LVU29
+ 135 0012 032A     		cmp	r2, #3
+ 136 0014 01D0     		beq	.L11
+ 204:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 137              		.loc 1 204 17 view .LVU30
+ 138 0016 0020     		movs	r0, #0
+ 139              	.LVL14:
+ 204:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 140              		.loc 1 204 17 view .LVU31
+ 141 0018 F9E7     		b	.L6
+ 142              	.LVL15:
+ 143              	.L11:
+ 201:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             }
+ 144              		.loc 1 201 17 is_stmt 1 view .LVU32
+ 145 001a 1846     		mov	r0, r3
+ 146              	.LVL16:
+ 201:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             }
+ 147              		.loc 1 201 17 is_stmt 0 view .LVU33
+ 148 001c FFF7FEFF 		bl	tcp_restclient_connection_close
+ 149              	.LVL17:
+ 204:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 150              		.loc 1 204 17 view .LVU34
+ 151 0020 0020     		movs	r0, #0
+ 152 0022 F4E7     		b	.L6
+ 153              	.LVL18:
+ 154              	.L5:
+ 209:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = ERR_ABRT;
+ 155              		.loc 1 209 9 is_stmt 1 view .LVU35
+ 156 0024 0846     		mov	r0, r1
+ 157              	.LVL19:
+ 209:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = ERR_ABRT;
+ 158              		.loc 1 209 9 is_stmt 0 view .LVU36
+ 159 0026 FFF7FEFF 		bl	tcp_abort
+ 160              	.LVL20:
+ 210:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 161              		.loc 1 210 9 is_stmt 1 view .LVU37
+ 210:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 162              		.loc 1 210 17 is_stmt 0 view .LVU38
+ 163 002a 6FF00C00 		mvn	r0, #12
+ 164 002e EEE7     		b	.L6
+ 165              		.cfi_endproc
+ 166              	.LFE171:
+ 168              		.section	.text.tcp_restclient_sent,"ax",%progbits
+ 169              		.align	1
+ 170              		.syntax unified
+ 171              		.thumb
+ 172              		.thumb_func
+ 174              	tcp_restclient_sent:
+ 175              	.LVL21:
+ 176              	.LFB172:
+ 214:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static err_t tcp_restclient_sent(void *arg, struct tcp_pcb *tpcb, u16_t len)
+ 215:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+ 177              		.loc 1 215 1 is_stmt 1 view -0
+ARM GAS  /tmp/cc22phhs.s 			page 8
+
+
+ 178              		.cfi_startproc
+ 179              		@ args = 0, pretend = 0, frame = 0
+ 180              		@ frame_needed = 0, uses_anonymous_args = 0
+ 216:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts;
+ 181              		.loc 1 216 5 view .LVU40
+ 217:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 218:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     LWIP_UNUSED_ARG(len);
+ 182              		.loc 1 218 5 view .LVU41
+ 219:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 220:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts = (struct tcpclient *)arg;
+ 183              		.loc 1 220 5 view .LVU42
+ 221:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts->retries = 0;
+ 184              		.loc 1 221 5 view .LVU43
+ 185              		.loc 1 221 17 is_stmt 0 view .LVU44
+ 186 0000 0022     		movs	r2, #0
+ 187              	.LVL22:
+ 188              		.loc 1 221 17 view .LVU45
+ 189 0002 4270     		strb	r2, [r0, #1]
+ 222:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 223:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     if(ts->p != NULL)
+ 190              		.loc 1 223 5 is_stmt 1 view .LVU46
+ 191              		.loc 1 223 10 is_stmt 0 view .LVU47
+ 192 0004 8268     		ldr	r2, [r0, #8]
+ 193              		.loc 1 223 7 view .LVU48
+ 194 0006 0AB1     		cbz	r2, .L18
+ 224:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 225:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* still got pbufs to send */
+ 226:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         //tcp_sent(tpcb, tcp_echoserver_sent);
+ 227:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         //tcp_restclient_send(tpcb, es);
+ 228:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 229:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     else
+ 230:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 231:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* if no more data to send and client closed connection*/
+ 232:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         if(ts->state == TS_CLOSING)
+ 233:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_restclient_connection_close(tpcb, ts);
+ 234:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 235:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     return ERR_OK;
+ 195              		.loc 1 235 5 is_stmt 1 view .LVU49
+ 236:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 196              		.loc 1 236 1 is_stmt 0 view .LVU50
+ 197 0008 0020     		movs	r0, #0
+ 198              	.LVL23:
+ 199              		.loc 1 236 1 view .LVU51
+ 200 000a 7047     		bx	lr
+ 201              	.LVL24:
+ 202              	.L18:
+ 215:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts;
+ 203              		.loc 1 215 1 view .LVU52
+ 204 000c 08B5     		push	{r3, lr}
+ 205              	.LCFI2:
+ 206              		.cfi_def_cfa_offset 8
+ 207              		.cfi_offset 3, -8
+ 208              		.cfi_offset 14, -4
+ 209 000e 0B46     		mov	r3, r1
+ 232:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_restclient_connection_close(tpcb, ts);
+ 210              		.loc 1 232 9 is_stmt 1 view .LVU53
+ 232:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_restclient_connection_close(tpcb, ts);
+ARM GAS  /tmp/cc22phhs.s 			page 9
+
+
+ 211              		.loc 1 232 14 is_stmt 0 view .LVU54
+ 212 0010 0278     		ldrb	r2, [r0]	@ zero_extendqisi2
+ 232:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_restclient_connection_close(tpcb, ts);
+ 213              		.loc 1 232 11 view .LVU55
+ 214 0012 032A     		cmp	r2, #3
+ 215 0014 01D0     		beq	.L19
+ 216              	.LVL25:
+ 217              	.L13:
+ 235:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 218              		.loc 1 235 5 is_stmt 1 view .LVU56
+ 219              		.loc 1 236 1 is_stmt 0 view .LVU57
+ 220 0016 0020     		movs	r0, #0
+ 221 0018 08BD     		pop	{r3, pc}
+ 222              	.LVL26:
+ 223              	.L19:
+ 233:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 224              		.loc 1 233 9 is_stmt 1 view .LVU58
+ 225 001a 0146     		mov	r1, r0
+ 226              	.LVL27:
+ 233:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 227              		.loc 1 233 9 is_stmt 0 view .LVU59
+ 228 001c 1846     		mov	r0, r3
+ 229              	.LVL28:
+ 233:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 230              		.loc 1 233 9 view .LVU60
+ 231 001e FFF7FEFF 		bl	tcp_restclient_connection_close
+ 232              	.LVL29:
+ 233:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 233              		.loc 1 233 9 view .LVU61
+ 234 0022 F8E7     		b	.L13
+ 235              		.cfi_endproc
+ 236              	.LFE172:
+ 238              		.section	.rodata.tcp_restclient_recv.str1.4,"aMS",%progbits,1
+ 239              		.align	2
+ 240              	.LC0:
+ 241 0000 53544D33 		.ascii	"STM32LIB-LwIP-RESTclient/tcp_restclient.c\000"
+ 241      324C4942 
+ 241      2D4C7749 
+ 241      502D5245 
+ 241      5354636C 
+ 242 002a 0000     		.align	2
+ 243              	.LC1:
+ 244 002c 61726720 		.ascii	"arg != NULL\000"
+ 244      213D204E 
+ 244      554C4C00 
+ 245              		.align	2
+ 246              	.LC2:
+ 247 0038 41737365 		.ascii	"Assertion \"%s\" failed at line %d in %s\012\000"
+ 247      7274696F 
+ 247      6E202225 
+ 247      73222066 
+ 247      61696C65 
+ 248              		.section	.text.tcp_restclient_recv,"ax",%progbits
+ 249              		.align	1
+ 250              		.syntax unified
+ 251              		.thumb
+ 252              		.thumb_func
+ARM GAS  /tmp/cc22phhs.s 			page 10
+
+
+ 254              	tcp_restclient_recv:
+ 255              	.LVL30:
+ 256              	.LFB169:
+  93:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts;
+ 257              		.loc 1 93 1 is_stmt 1 view -0
+ 258              		.cfi_startproc
+ 259              		@ args = 0, pretend = 0, frame = 0
+ 260              		@ frame_needed = 0, uses_anonymous_args = 0
+  93:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts;
+ 261              		.loc 1 93 1 is_stmt 0 view .LVU63
+ 262 0000 F8B5     		push	{r3, r4, r5, r6, r7, lr}
+ 263              	.LCFI3:
+ 264              		.cfi_def_cfa_offset 24
+ 265              		.cfi_offset 3, -24
+ 266              		.cfi_offset 4, -20
+ 267              		.cfi_offset 5, -16
+ 268              		.cfi_offset 6, -12
+ 269              		.cfi_offset 7, -8
+ 270              		.cfi_offset 14, -4
+ 271 0002 0F46     		mov	r7, r1
+ 272 0004 1546     		mov	r5, r2
+ 273 0006 1C46     		mov	r4, r3
+  94:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     err_t ret_err;
+ 274              		.loc 1 94 5 is_stmt 1 view .LVU64
+  95:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 275              		.loc 1 95 5 view .LVU65
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 276              		.loc 1 97 5 view .LVU66
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 277              		.loc 1 97 5 view .LVU67
+ 278 0008 0646     		mov	r6, r0
+ 279 000a 68B1     		cbz	r0, .L28
+ 280              	.LVL31:
+ 281              	.L21:
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 282              		.loc 1 97 5 discriminator 3 view .LVU68
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 283              		.loc 1 97 5 discriminator 3 view .LVU69
+  99:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 284              		.loc 1 99 5 discriminator 3 view .LVU70
+ 102:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 285              		.loc 1 102 5 discriminator 3 view .LVU71
+ 102:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 286              		.loc 1 102 8 is_stmt 0 discriminator 3 view .LVU72
+ 287 000c 9DB1     		cbz	r5, .L29
+ 118:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 288              		.loc 1 118 10 is_stmt 1 view .LVU73
+ 118:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 289              		.loc 1 118 12 is_stmt 0 view .LVU74
+ 290 000e F4B9     		cbnz	r4, .L30
+ 128:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 291              		.loc 1 128 10 is_stmt 1 view .LVU75
+ 128:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 292              		.loc 1 128 15 is_stmt 0 view .LVU76
+ 293 0010 3378     		ldrb	r3, [r6]	@ zero_extendqisi2
+ 128:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 294              		.loc 1 128 12 view .LVU77
+ARM GAS  /tmp/cc22phhs.s 			page 11
+
+
+ 295 0012 012B     		cmp	r3, #1
+ 296 0014 22D0     		beq	.L31
+ 153:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 297              		.loc 1 153 9 is_stmt 1 view .LVU78
+ 298 0016 2989     		ldrh	r1, [r5, #8]
+ 299 0018 3846     		mov	r0, r7
+ 300 001a FFF7FEFF 		bl	tcp_recved
+ 301              	.LVL32:
+ 156:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ret_err = ERR_OK;
+ 302              		.loc 1 156 9 view .LVU79
+ 303 001e 2846     		mov	r0, r5
+ 304 0020 FFF7FEFF 		bl	pbuf_free
+ 305              	.LVL33:
+ 157:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 306              		.loc 1 157 9 view .LVU80
+ 157:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 307              		.loc 1 157 17 is_stmt 0 view .LVU81
+ 308 0024 2046     		mov	r0, r4
+ 309              	.LVL34:
+ 310              	.L23:
+ 159:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 311              		.loc 1 159 5 is_stmt 1 view .LVU82
+ 160:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 312              		.loc 1 160 1 is_stmt 0 view .LVU83
+ 313 0026 F8BD     		pop	{r3, r4, r5, r6, r7, pc}
+ 314              	.LVL35:
+ 315              	.L28:
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 316              		.loc 1 97 5 is_stmt 1 discriminator 1 view .LVU84
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 317              		.loc 1 97 5 discriminator 1 view .LVU85
+ 318 0028 154B     		ldr	r3, .L33
+ 319              	.LVL36:
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 320              		.loc 1 97 5 is_stmt 0 discriminator 1 view .LVU86
+ 321 002a 6122     		movs	r2, #97
+ 322              	.LVL37:
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 323              		.loc 1 97 5 discriminator 1 view .LVU87
+ 324 002c 1549     		ldr	r1, .L33+4
+ 325              	.LVL38:
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 326              		.loc 1 97 5 discriminator 1 view .LVU88
+ 327 002e 1648     		ldr	r0, .L33+8
+ 328              	.LVL39:
+  97:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 329              		.loc 1 97 5 discriminator 1 view .LVU89
+ 330 0030 FFF7FEFF 		bl	printf
+ 331              	.LVL40:
+ 332 0034 EAE7     		b	.L21
+ 333              	.LVL41:
+ 334              	.L29:
+ 105:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         if(ts->p == NULL)
+ 335              		.loc 1 105 9 is_stmt 1 view .LVU90
+ 105:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         if(ts->p == NULL)
+ 336              		.loc 1 105 19 is_stmt 0 view .LVU91
+ 337 0036 0323     		movs	r3, #3
+ARM GAS  /tmp/cc22phhs.s 			page 12
+
+
+ 338 0038 3370     		strb	r3, [r6]
+ 106:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 339              		.loc 1 106 9 is_stmt 1 view .LVU92
+ 106:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 340              		.loc 1 106 14 is_stmt 0 view .LVU93
+ 341 003a B368     		ldr	r3, [r6, #8]
+ 106:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 342              		.loc 1 106 11 view .LVU94
+ 343 003c 0BB1     		cbz	r3, .L32
+ 115:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }   
+ 344              		.loc 1 115 17 view .LVU95
+ 345 003e 0020     		movs	r0, #0
+ 346 0040 F1E7     		b	.L23
+ 347              	.L32:
+ 109:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 348              		.loc 1 109 13 is_stmt 1 view .LVU96
+ 349 0042 3146     		mov	r1, r6
+ 350 0044 3846     		mov	r0, r7
+ 351 0046 FFF7FEFF 		bl	tcp_restclient_connection_close
+ 352              	.LVL42:
+ 115:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }   
+ 353              		.loc 1 115 17 is_stmt 0 view .LVU97
+ 354 004a 0020     		movs	r0, #0
+ 355 004c EBE7     		b	.L23
+ 356              	.L30:
+ 121:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 357              		.loc 1 121 9 is_stmt 1 view .LVU98
+ 123:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             pbuf_free(p);
+ 358              		.loc 1 123 13 view .LVU99
+ 123:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             pbuf_free(p);
+ 359              		.loc 1 123 19 is_stmt 0 view .LVU100
+ 360 004e 0023     		movs	r3, #0
+ 361 0050 B360     		str	r3, [r6, #8]
+ 124:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 362              		.loc 1 124 13 is_stmt 1 view .LVU101
+ 363 0052 2846     		mov	r0, r5
+ 364 0054 FFF7FEFF 		bl	pbuf_free
+ 365              	.LVL43:
+ 126:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 366              		.loc 1 126 9 view .LVU102
+ 126:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 367              		.loc 1 126 17 is_stmt 0 view .LVU103
+ 368 0058 2046     		mov	r0, r4
+ 369 005a E4E7     		b	.L23
+ 370              	.LVL44:
+ 371              	.L31:
+ 130:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 372              		.loc 1 130 9 is_stmt 1 view .LVU104
+ 130:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 373              		.loc 1 130 15 is_stmt 0 view .LVU105
+ 374 005c B560     		str	r5, [r6, #8]
+ 133:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 375              		.loc 1 133 9 is_stmt 1 view .LVU106
+ 133:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 376              		.loc 1 133 22 is_stmt 0 view .LVU107
+ 377 005e 0B4A     		ldr	r2, .L33+12
+ 378 0060 1368     		ldr	r3, [r2]
+ARM GAS  /tmp/cc22phhs.s 			page 13
+
+
+ 379 0062 0133     		adds	r3, r3, #1
+ 380 0064 1360     		str	r3, [r2]
+ 136:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 381              		.loc 1 136 9 is_stmt 1 view .LVU108
+ 382 0066 2989     		ldrh	r1, [r5, #8]
+ 383 0068 3846     		mov	r0, r7
+ 384 006a FFF7FEFF 		bl	tcp_recved
+ 385              	.LVL45:
+ 142:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 	    pcbTx = tpcb; //TODO
+ 386              		.loc 1 142 6 view .LVU109
+ 142:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 	    pcbTx = tpcb; //TODO
+ 387              		.loc 1 142 11 is_stmt 0 view .LVU110
+ 388 006e 084B     		ldr	r3, .L33+16
+ 389 0070 1E60     		str	r6, [r3]
+ 143:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 390              		.loc 1 143 6 is_stmt 1 view .LVU111
+ 143:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 391              		.loc 1 143 12 is_stmt 0 view .LVU112
+ 392 0072 084B     		ldr	r3, .L33+20
+ 393 0074 1F60     		str	r7, [r3]
+ 145:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 394              		.loc 1 145 9 is_stmt 1 view .LVU113
+ 395 0076 2846     		mov	r0, r5
+ 396 0078 FFF7FEFF 		bl	pbuf_free
+ 397              	.LVL46:
+ 147:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 398              		.loc 1 147 9 view .LVU114
+ 147:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 399              		.loc 1 147 17 is_stmt 0 view .LVU115
+ 400 007c 2046     		mov	r0, r4
+ 401 007e D2E7     		b	.L23
+ 402              	.L34:
+ 403              		.align	2
+ 404              	.L33:
+ 405 0080 00000000 		.word	.LC0
+ 406 0084 2C000000 		.word	.LC1
+ 407 0088 38000000 		.word	.LC2
+ 408 008c 00000000 		.word	.LANCHOR0
+ 409 0090 00000000 		.word	.LANCHOR1
+ 410 0094 00000000 		.word	.LANCHOR2
+ 411              		.cfi_endproc
+ 412              	.LFE169:
+ 414              		.section	.text.tcp_restclient_send,"ax",%progbits
+ 415              		.align	1
+ 416              		.syntax unified
+ 417              		.thumb
+ 418              		.thumb_func
+ 420              	tcp_restclient_send:
+ 421              	.LVL47:
+ 422              	.LFB173:
+ 237:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** static void tcp_restclient_send(struct tcp_pcb *tpcb, struct tcpclient * ts)
+ 238:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+ 423              		.loc 1 238 1 is_stmt 1 view -0
+ 424              		.cfi_startproc
+ 425              		@ args = 0, pretend = 0, frame = 0
+ 426              		@ frame_needed = 0, uses_anonymous_args = 0
+ 427              		.loc 1 238 1 is_stmt 0 view .LVU117
+ARM GAS  /tmp/cc22phhs.s 			page 14
+
+
+ 428 0000 F8B5     		push	{r3, r4, r5, r6, r7, lr}
+ 429              	.LCFI4:
+ 430              		.cfi_def_cfa_offset 24
+ 431              		.cfi_offset 3, -24
+ 432              		.cfi_offset 4, -20
+ 433              		.cfi_offset 5, -16
+ 434              		.cfi_offset 6, -12
+ 435              		.cfi_offset 7, -8
+ 436              		.cfi_offset 14, -4
+ 437 0002 0646     		mov	r6, r0
+ 438 0004 0F46     		mov	r7, r1
+ 239:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct pbuf *ptr;
+ 439              		.loc 1 239 5 is_stmt 1 view .LVU118
+ 240:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     err_t wr_err = ERR_OK;
+ 440              		.loc 1 240 5 view .LVU119
+ 441              	.LVL48:
+ 241:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 242:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     while ((wr_err == ERR_OK) &&
+ 442              		.loc 1 242 5 view .LVU120
+ 240:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     err_t wr_err = ERR_OK;
+ 443              		.loc 1 240 11 is_stmt 0 view .LVU121
+ 444 0006 0025     		movs	r5, #0
+ 445              		.loc 1 242 11 view .LVU122
+ 446 0008 09E0     		b	.L36
+ 447              	.LVL49:
+ 448              	.L44:
+ 449              	.LBB2:
+ 243:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     (ts->p != NULL) && 
+ 244:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     (ts->p->len <= tcp_sndbuf(tpcb)))
+ 245:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 246:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 247:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* get pointer on pbuf from ts structure */
+ 248:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         ptr = ts->p;
+ 249:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 250:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* enqueue data for transmission */
+ 251:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         wr_err = tcp_write(tpcb, ptr->payload, ptr->len, 1);
+ 252:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 253:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         if (wr_err == ERR_OK)
+ 254:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 255:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             u16_t plen;
+ 450              		.loc 1 255 13 is_stmt 1 view .LVU123
+ 256:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             u8_t freed;
+ 451              		.loc 1 256 13 view .LVU124
+ 257:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 258:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             plen = ptr->len;
+ 452              		.loc 1 258 13 view .LVU125
+ 259:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 260:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* continue with next pbuf in chain (if any) */
+ 261:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             ts->p = ptr->next;
+ 453              		.loc 1 261 13 view .LVU126
+ 454              		.loc 1 261 24 is_stmt 0 view .LVU127
+ 455 000a 2068     		ldr	r0, [r4]
+ 456              	.LVL50:
+ 457              		.loc 1 261 19 view .LVU128
+ 458 000c B860     		str	r0, [r7, #8]
+ 459              	.LVL51:
+ 262:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ARM GAS  /tmp/cc22phhs.s 			page 15
+
+
+ 263:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             if(ts->p != NULL)
+ 460              		.loc 1 263 13 is_stmt 1 view .LVU129
+ 461              		.loc 1 263 15 is_stmt 0 view .LVU130
+ 462 000e 08B1     		cbz	r0, .L39
+ 264:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             {
+ 265:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****                 /* increment reference count for es->p */
+ 266:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****                 pbuf_ref(ts->p);
+ 463              		.loc 1 266 17 is_stmt 1 view .LVU131
+ 464 0010 FFF7FEFF 		bl	pbuf_ref
+ 465              	.LVL52:
+ 466              	.L39:
+ 267:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             }
+ 268:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 269:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* chop first pbuf from chain */
+ 270:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             do
+ 467              		.loc 1 270 13 discriminator 1 view .LVU132
+ 271:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             {
+ 272:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****                 /* try hard to free pbuf */
+ 273:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****                 freed = pbuf_free(ptr);
+ 468              		.loc 1 273 17 discriminator 1 view .LVU133
+ 469              		.loc 1 273 25 is_stmt 0 discriminator 1 view .LVU134
+ 470 0014 2046     		mov	r0, r4
+ 471 0016 FFF7FEFF 		bl	pbuf_free
+ 472              	.LVL53:
+ 274:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             }
+ 275:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             while(freed == 0);
+ 473              		.loc 1 275 18 is_stmt 1 discriminator 1 view .LVU135
+ 474              		.loc 1 275 13 is_stmt 0 discriminator 1 view .LVU136
+ 475 001a 0028     		cmp	r0, #0
+ 476 001c FAD0     		beq	.L39
+ 477              	.LVL54:
+ 478              	.L36:
+ 479              		.loc 1 275 13 discriminator 1 view .LVU137
+ 480              	.LBE2:
+ 276:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* we can read more data now */
+ 277:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             //tcp_recved(tpcb, plen);
+ 278:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 279:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         else if(wr_err == ERR_MEM)
+ 280:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 281:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* we are low on memory, try later / harder, defer to poll */
+ 282:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             ts->p = ptr;
+ 283:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 284:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         else
+ 285:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 286:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****             /* other problem ?? */
+ 287:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 481              		.loc 1 287 9 is_stmt 1 view .LVU138
+ 242:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     (ts->p != NULL) && 
+ 482              		.loc 1 242 11 view .LVU139
+ 483 001e 9DB9     		cbnz	r5, .L35
+ 243:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     (ts->p->len <= tcp_sndbuf(tpcb)))
+ 484              		.loc 1 243 8 is_stmt 0 discriminator 1 view .LVU140
+ 485 0020 BC68     		ldr	r4, [r7, #8]
+ 242:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     (ts->p != NULL) && 
+ 486              		.loc 1 242 31 discriminator 1 view .LVU141
+ 487 0022 8CB1     		cbz	r4, .L35
+ 244:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ARM GAS  /tmp/cc22phhs.s 			page 16
+
+
+ 488              		.loc 1 244 11 view .LVU142
+ 489 0024 6289     		ldrh	r2, [r4, #10]
+ 244:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 490              		.loc 1 244 20 view .LVU143
+ 491 0026 B6F86430 		ldrh	r3, [r6, #100]
+ 243:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     (ts->p->len <= tcp_sndbuf(tpcb)))
+ 492              		.loc 1 243 21 view .LVU144
+ 493 002a 9A42     		cmp	r2, r3
+ 494 002c 0CD8     		bhi	.L35
+ 248:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 495              		.loc 1 248 9 is_stmt 1 view .LVU145
+ 496              	.LVL55:
+ 251:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 497              		.loc 1 251 9 view .LVU146
+ 251:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 498              		.loc 1 251 18 is_stmt 0 view .LVU147
+ 499 002e 0123     		movs	r3, #1
+ 500 0030 6168     		ldr	r1, [r4, #4]
+ 501 0032 3046     		mov	r0, r6
+ 502 0034 FFF7FEFF 		bl	tcp_write
+ 503              	.LVL56:
+ 253:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 504              		.loc 1 253 9 is_stmt 1 view .LVU148
+ 253:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 505              		.loc 1 253 12 is_stmt 0 view .LVU149
+ 506 0038 0546     		mov	r5, r0
+ 507 003a 0028     		cmp	r0, #0
+ 508 003c E5D0     		beq	.L44
+ 279:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 509              		.loc 1 279 14 is_stmt 1 view .LVU150
+ 279:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         {
+ 510              		.loc 1 279 16 is_stmt 0 view .LVU151
+ 511 003e B0F1FF3F 		cmp	r0, #-1
+ 512 0042 ECD1     		bne	.L36
+ 282:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 513              		.loc 1 282 13 is_stmt 1 view .LVU152
+ 282:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         }
+ 514              		.loc 1 282 19 is_stmt 0 view .LVU153
+ 515 0044 BC60     		str	r4, [r7, #8]
+ 516 0046 EAE7     		b	.L36
+ 517              	.LVL57:
+ 518              	.L35:
+ 288:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 289:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 519              		.loc 1 289 1 view .LVU154
+ 520 0048 F8BD     		pop	{r3, r4, r5, r6, r7, pc}
+ 521              		.loc 1 289 1 view .LVU155
+ 522              		.cfi_endproc
+ 523              	.LFE173:
+ 525              		.section	.rodata.tcp_restclient_connected.str1.4,"aMS",%progbits,1
+ 526              		.align	2
+ 527              	.LC3:
+ 528 0000 504F5354 		.ascii	"POST /register_device/ HTTP/1.1\015\012Host: 20.127"
+ 528      202F7265 
+ 528      67697374 
+ 528      65725F64 
+ 528      65766963 
+ARM GAS  /tmp/cc22phhs.s 			page 17
+
+
+ 529 002d 2E35342E 		.ascii	".54.216\015\012User-Agent: lwip\015\012Content-Type"
+ 529      3231360D 
+ 529      0A557365 
+ 529      722D4167 
+ 529      656E743A 
+ 530 0054 3A206170 		.ascii	": application/json\015\012Accept: */*\015\012Conten"
+ 530      706C6963 
+ 530      6174696F 
+ 530      6E2F6A73 
+ 530      6F6E0D0A 
+ 531 007b 742D4C65 		.ascii	"t-Length: 38\015\012\015\012{\"serial\" : 10123, \""
+ 531      6E677468 
+ 531      3A203338 
+ 531      0D0A0D0A 
+ 531      7B227365 
+ 532 009f 706B5F73 		.ascii	"pk_store\" : 2}\015\012\015\012\000"
+ 532      746F7265 
+ 532      22203A20 
+ 532      327D0D0A 
+ 532      0D0A00
+ 533              		.section	.text.tcp_restclient_connected,"ax",%progbits
+ 534              		.align	1
+ 535              		.syntax unified
+ 536              		.thumb
+ 537              		.thumb_func
+ 539              	tcp_restclient_connected:
+ 540              	.LVL58:
+ 541              	.LFB168:
+  46:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts = NULL;
+ 542              		.loc 1 46 1 is_stmt 1 view -0
+ 543              		.cfi_startproc
+ 544              		@ args = 0, pretend = 0, frame = 200
+ 545              		@ frame_needed = 0, uses_anonymous_args = 0
+  46:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcpclient *ts = NULL;
+ 546              		.loc 1 46 1 is_stmt 0 view .LVU157
+ 547 0000 70B5     		push	{r4, r5, r6, lr}
+ 548              	.LCFI5:
+ 549              		.cfi_def_cfa_offset 16
+ 550              		.cfi_offset 4, -16
+ 551              		.cfi_offset 5, -12
+ 552              		.cfi_offset 6, -8
+ 553              		.cfi_offset 14, -4
+ 554 0002 B2B0     		sub	sp, sp, #200
+ 555              	.LCFI6:
+ 556              		.cfi_def_cfa_offset 216
+ 557 0004 0C46     		mov	r4, r1
+  47:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 558              		.loc 1 47 5 is_stmt 1 view .LVU158
+ 559              	.LVL59:
+  50:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 560              		.loc 1 50 5 view .LVU159
+  50:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 561              		.loc 1 50 7 is_stmt 0 view .LVU160
+ 562 0006 002A     		cmp	r2, #0
+ 563 0008 37D1     		bne	.L50
+ 564              	.LVL60:
+ 565              	.L46:
+ARM GAS  /tmp/cc22phhs.s 			page 18
+
+
+  53:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 566              		.loc 1 53 5 is_stmt 1 view .LVU161
+  53:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 567              		.loc 1 53 30 is_stmt 0 view .LVU162
+ 568 000a 0C20     		movs	r0, #12
+ 569 000c FFF7FEFF 		bl	mem_malloc
+ 570              	.LVL61:
+ 571 0010 0546     		mov	r5, r0
+ 572              	.LVL62:
+  56:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     //sprintf((char*)data, "sending tcp client message %d", (int)message_count);
+ 573              		.loc 1 56 5 is_stmt 1 view .LVU163
+  58:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts->p = pbuf_alloc(PBUF_TRANSPORT, strlen((char*)data) , PBUF_POOL);
+ 574              		.loc 1 58 5 view .LVU164
+ 575 0012 B222     		movs	r2, #178
+ 576 0014 1F49     		ldr	r1, .L52
+ 577 0016 6846     		mov	r0, sp
+ 578              	.LVL63:
+  58:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts->p = pbuf_alloc(PBUF_TRANSPORT, strlen((char*)data) , PBUF_POOL);
+ 579              		.loc 1 58 5 is_stmt 0 view .LVU165
+ 580 0018 FFF7FEFF 		bl	memcpy
+ 581              	.LVL64:
+  59:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     pbuf_take(ts->p, (char*)data, strlen((char*)data));
+ 582              		.loc 1 59 5 is_stmt 1 view .LVU166
+  59:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     pbuf_take(ts->p, (char*)data, strlen((char*)data));
+ 583              		.loc 1 59 40 is_stmt 0 view .LVU167
+ 584 001c 6846     		mov	r0, sp
+ 585 001e FFF7FEFF 		bl	strlen
+ 586              	.LVL65:
+  59:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     pbuf_take(ts->p, (char*)data, strlen((char*)data));
+ 587              		.loc 1 59 13 view .LVU168
+ 588 0022 4FF4C172 		mov	r2, #386
+ 589 0026 81B2     		uxth	r1, r0
+ 590 0028 3620     		movs	r0, #54
+ 591 002a FFF7FEFF 		bl	pbuf_alloc
+ 592              	.LVL66:
+ 593 002e 0646     		mov	r6, r0
+  59:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     pbuf_take(ts->p, (char*)data, strlen((char*)data));
+ 594              		.loc 1 59 11 view .LVU169
+ 595 0030 A860     		str	r0, [r5, #8]
+  60:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 596              		.loc 1 60 5 is_stmt 1 view .LVU170
+  60:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 597              		.loc 1 60 35 is_stmt 0 view .LVU171
+ 598 0032 6846     		mov	r0, sp
+ 599 0034 FFF7FEFF 		bl	strlen
+ 600              	.LVL67:
+  60:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 601              		.loc 1 60 5 view .LVU172
+ 602 0038 82B2     		uxth	r2, r0
+ 603 003a 6946     		mov	r1, sp
+ 604 003c 3046     		mov	r0, r6
+ 605 003e FFF7FEFF 		bl	pbuf_take
+ 606              	.LVL68:
+  62:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 607              		.loc 1 62 5 is_stmt 1 view .LVU173
+  62:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 608              		.loc 1 62 7 is_stmt 0 view .LVU174
+ARM GAS  /tmp/cc22phhs.s 			page 19
+
+
+ 609 0042 FDB1     		cbz	r5, .L51
+  71:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts->pcb = tpcb;
+ 610              		.loc 1 71 5 is_stmt 1 view .LVU175
+  71:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ts->pcb = tpcb;
+ 611              		.loc 1 71 15 is_stmt 0 view .LVU176
+ 612 0044 0126     		movs	r6, #1
+ 613 0046 2E70     		strb	r6, [r5]
+  72:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 614              		.loc 1 72 5 is_stmt 1 view .LVU177
+  72:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 615              		.loc 1 72 13 is_stmt 0 view .LVU178
+ 616 0048 6C60     		str	r4, [r5, #4]
+  75:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 617              		.loc 1 75 5 is_stmt 1 view .LVU179
+ 618 004a 2946     		mov	r1, r5
+ 619 004c 2046     		mov	r0, r4
+ 620 004e FFF7FEFF 		bl	tcp_arg
+ 621              	.LVL69:
+  78:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 622              		.loc 1 78 5 view .LVU180
+ 623 0052 1149     		ldr	r1, .L52+4
+ 624 0054 2046     		mov	r0, r4
+ 625 0056 FFF7FEFF 		bl	tcp_recv
+ 626              	.LVL70:
+  81:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 627              		.loc 1 81 5 view .LVU181
+ 628 005a 1049     		ldr	r1, .L52+8
+ 629 005c 2046     		mov	r0, r4
+ 630 005e FFF7FEFF 		bl	tcp_sent
+ 631              	.LVL71:
+  84:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 632              		.loc 1 84 5 view .LVU182
+ 633 0062 3246     		mov	r2, r6
+ 634 0064 0E49     		ldr	r1, .L52+12
+ 635 0066 2046     		mov	r0, r4
+ 636 0068 FFF7FEFF 		bl	tcp_poll
+ 637              	.LVL72:
+  87:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 638              		.loc 1 87 5 view .LVU183
+ 639 006c 2946     		mov	r1, r5
+ 640 006e 2046     		mov	r0, r4
+ 641 0070 FFF7FEFF 		bl	tcp_restclient_send
+ 642              	.LVL73:
+  89:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 643              		.loc 1 89 5 view .LVU184
+  89:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 644              		.loc 1 89 12 is_stmt 0 view .LVU185
+ 645 0074 0020     		movs	r0, #0
+ 646              	.L48:
+  90:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 647              		.loc 1 90 1 view .LVU186
+ 648 0076 32B0     		add	sp, sp, #200
+ 649              	.LCFI7:
+ 650              		.cfi_remember_state
+ 651              		.cfi_def_cfa_offset 16
+ 652              		@ sp needed
+ 653 0078 70BD     		pop	{r4, r5, r6, pc}
+ARM GAS  /tmp/cc22phhs.s 			page 20
+
+
+ 654              	.LVL74:
+ 655              	.L50:
+ 656              	.LCFI8:
+ 657              		.cfi_restore_state
+  50:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 658              		.loc 1 50 25 is_stmt 1 discriminator 1 view .LVU187
+ 659 007a 0021     		movs	r1, #0
+ 660              	.LVL75:
+  50:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 661              		.loc 1 50 25 is_stmt 0 discriminator 1 view .LVU188
+ 662 007c 2046     		mov	r0, r4
+ 663              	.LVL76:
+  50:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 664              		.loc 1 50 25 discriminator 1 view .LVU189
+ 665 007e FFF7FEFF 		bl	tcp_restclient_connection_close
+ 666              	.LVL77:
+  50:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 667              		.loc 1 50 25 discriminator 1 view .LVU190
+ 668 0082 C2E7     		b	.L46
+ 669              	.LVL78:
+ 670              	.L51:
+  65:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 671              		.loc 1 65 9 is_stmt 1 view .LVU191
+ 672 0084 2946     		mov	r1, r5
+ 673 0086 2046     		mov	r0, r4
+ 674 0088 FFF7FEFF 		bl	tcp_restclient_connection_close
+ 675              	.LVL79:
+  68:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 676              		.loc 1 68 9 view .LVU192
+  68:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 677              		.loc 1 68 16 is_stmt 0 view .LVU193
+ 678 008c 4FF0FF30 		mov	r0, #-1
+ 679 0090 F1E7     		b	.L48
+ 680              	.L53:
+ 681 0092 00BF     		.align	2
+ 682              	.L52:
+ 683 0094 00000000 		.word	.LC3
+ 684 0098 00000000 		.word	tcp_restclient_recv
+ 685 009c 00000000 		.word	tcp_restclient_sent
+ 686 00a0 00000000 		.word	tcp_restclient_poll
+ 687              		.cfi_endproc
+ 688              	.LFE168:
+ 690              		.section	.text.tcp_restclient_connect,"ax",%progbits
+ 691              		.align	1
+ 692              		.global	tcp_restclient_connect
+ 693              		.syntax unified
+ 694              		.thumb
+ 695              		.thumb_func
+ 697              	tcp_restclient_connect:
+ 698              	.LFB167:
+  34:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     ip_addr_t DestIPaddr;
+ 699              		.loc 1 34 1 is_stmt 1 view -0
+ 700              		.cfi_startproc
+ 701              		@ args = 0, pretend = 0, frame = 8
+ 702              		@ frame_needed = 0, uses_anonymous_args = 0
+ 703 0000 00B5     		push	{lr}
+ 704              	.LCFI9:
+ARM GAS  /tmp/cc22phhs.s 			page 21
+
+
+ 705              		.cfi_def_cfa_offset 4
+ 706              		.cfi_offset 14, -4
+ 707 0002 83B0     		sub	sp, sp, #12
+ 708              	.LCFI10:
+ 709              		.cfi_def_cfa_offset 16
+  35:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     struct tcp_pcb *tcp_pcb = tcp_new();
+ 710              		.loc 1 35 5 view .LVU195
+  36:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 711              		.loc 1 36 5 view .LVU196
+  36:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 712              		.loc 1 36 31 is_stmt 0 view .LVU197
+ 713 0004 FFF7FEFF 		bl	tcp_new
+ 714              	.LVL80:
+  38:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 715              		.loc 1 38 5 is_stmt 1 view .LVU198
+  38:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     {
+ 716              		.loc 1 38 7 is_stmt 0 view .LVU199
+ 717 0008 10B9     		cbnz	r0, .L57
+ 718              	.LVL81:
+ 719              	.L54:
+  43:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 720              		.loc 1 43 1 view .LVU200
+ 721 000a 03B0     		add	sp, sp, #12
+ 722              	.LCFI11:
+ 723              		.cfi_remember_state
+ 724              		.cfi_def_cfa_offset 4
+ 725              		@ sp needed
+ 726 000c 5DF804FB 		ldr	pc, [sp], #4
+ 727              	.LVL82:
+ 728              	.L57:
+ 729              	.LCFI12:
+ 730              		.cfi_restore_state
+  40:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         return tcp_connect(tcp_pcb, &DestIPaddr, DEST_PORT, tcp_restclient_connected);
+ 731              		.loc 1 40 9 is_stmt 1 view .LVU201
+ 732 0010 034B     		ldr	r3, .L58
+ 733 0012 0193     		str	r3, [sp, #4]
+  41:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 734              		.loc 1 41 9 view .LVU202
+  41:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 735              		.loc 1 41 16 is_stmt 0 view .LVU203
+ 736 0014 034B     		ldr	r3, .L58+4
+ 737 0016 5022     		movs	r2, #80
+ 738 0018 01A9     		add	r1, sp, #4
+ 739 001a FFF7FEFF 		bl	tcp_connect
+ 740              	.LVL83:
+  41:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     }
+ 741              		.loc 1 41 16 view .LVU204
+ 742 001e F4E7     		b	.L54
+ 743              	.L59:
+ 744              		.align	2
+ 745              	.L58:
+ 746 0020 147F36D8 		.word	-667517164
+ 747 0024 00000000 		.word	tcp_restclient_connected
+ 748              		.cfi_endproc
+ 749              	.LFE167:
+ 751              		.section	.rodata.test.str1.4,"aMS",%progbits,1
+ 752              		.align	2
+ARM GAS  /tmp/cc22phhs.s 			page 22
+
+
+ 753              	.LC4:
+ 754 0000 53656E64 		.ascii	"Sending TCPclient Message\012\000"
+ 754      696E6720 
+ 754      54435063 
+ 754      6C69656E 
+ 754      74204D65 
+ 755              		.section	.text.test,"ax",%progbits
+ 756              		.align	1
+ 757              		.global	test
+ 758              		.syntax unified
+ 759              		.thumb
+ 760              		.thumb_func
+ 762              	test:
+ 763              	.LFB174:
+ 290:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 291:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 292:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** void test(void)
+ 293:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** {
+ 764              		.loc 1 293 1 is_stmt 1 view -0
+ 765              		.cfi_startproc
+ 766              		@ args = 0, pretend = 0, frame = 104
+ 767              		@ frame_needed = 0, uses_anonymous_args = 0
+ 768 0000 70B5     		push	{r4, r5, r6, lr}
+ 769              	.LCFI13:
+ 770              		.cfi_def_cfa_offset 16
+ 771              		.cfi_offset 4, -16
+ 772              		.cfi_offset 5, -12
+ 773              		.cfi_offset 6, -8
+ 774              		.cfi_offset 14, -4
+ 775 0002 9AB0     		sub	sp, sp, #104
+ 776              	.LCFI14:
+ 777              		.cfi_def_cfa_offset 120
+ 294:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     char buf[100];
+ 778              		.loc 1 294 5 view .LVU206
+ 295:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 296:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****     int len = sprintf (buf, "Sending TCPclient Message\n");
+ 779              		.loc 1 296 5 view .LVU207
+ 780              		.loc 1 296 15 is_stmt 0 view .LVU208
+ 781 0004 0DF1040C 		add	ip, sp, #4
+ 782 0008 134C     		ldr	r4, .L62
+ 783 000a 0FCC     		ldmia	r4!, {r0, r1, r2, r3}
+ 784 000c ACE80F00 		stmia	ip!, {r0, r1, r2, r3}
+ 785 0010 94E80700 		ldm	r4, {r0, r1, r2}
+ 786 0014 ACE80300 		stmia	ip!, {r0, r1}
+ 787 0018 2CF8022B 		strh	r2, [ip], #2	@ movhi
+ 788 001c 120C     		lsrs	r2, r2, #16
+ 789 001e 8CF80020 		strb	r2, [ip]
+ 790              	.LVL84:
+ 297:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 298:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* allocate pbuf */
+ 299:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tsTx->p = pbuf_alloc(PBUF_TRANSPORT, len , PBUF_POOL);
+ 791              		.loc 1 299 9 is_stmt 1 view .LVU209
+ 792              		.loc 1 299 19 is_stmt 0 view .LVU210
+ 793 0022 1A25     		movs	r5, #26
+ 794              		.loc 1 299 13 view .LVU211
+ 795 0024 0D4C     		ldr	r4, .L62+4
+ 796 0026 2668     		ldr	r6, [r4]
+ARM GAS  /tmp/cc22phhs.s 			page 23
+
+
+ 797              		.loc 1 299 19 view .LVU212
+ 798 0028 4FF4C172 		mov	r2, #386
+ 799 002c 2946     		mov	r1, r5
+ 800 002e 3620     		movs	r0, #54
+ 801 0030 FFF7FEFF 		bl	pbuf_alloc
+ 802              	.LVL85:
+ 803              		.loc 1 299 17 view .LVU213
+ 804 0034 B060     		str	r0, [r6, #8]
+ 300:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 301:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 302:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         /* copy data to pbuf */
+ 303:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         pbuf_take(tsTx->p, (char*)buf, len);
+ 805              		.loc 1 303 9 is_stmt 1 view .LVU214
+ 806              		.loc 1 303 23 is_stmt 0 view .LVU215
+ 807 0036 2368     		ldr	r3, [r4]
+ 808              		.loc 1 303 9 view .LVU216
+ 809 0038 2A46     		mov	r2, r5
+ 810 003a 01A9     		add	r1, sp, #4
+ 811 003c 9868     		ldr	r0, [r3, #8]
+ 812 003e FFF7FEFF 		bl	pbuf_take
+ 813              	.LVL86:
+ 304:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 305:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         tcp_restclient_send(pcbTx, tsTx);
+ 814              		.loc 1 305 9 is_stmt 1 view .LVU217
+ 815 0042 2168     		ldr	r1, [r4]
+ 816 0044 064B     		ldr	r3, .L62+8
+ 817 0046 1868     		ldr	r0, [r3]
+ 818 0048 FFF7FEFF 		bl	tcp_restclient_send
+ 819              	.LVL87:
+ 306:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** 
+ 307:STM32LIB-LwIP-RESTclient/tcp_restclient.c ****         pbuf_free(tsTx->p);
+ 820              		.loc 1 307 9 view .LVU218
+ 821              		.loc 1 307 23 is_stmt 0 view .LVU219
+ 822 004c 2368     		ldr	r3, [r4]
+ 823              		.loc 1 307 9 view .LVU220
+ 824 004e 9868     		ldr	r0, [r3, #8]
+ 825 0050 FFF7FEFF 		bl	pbuf_free
+ 826              	.LVL88:
+ 308:STM32LIB-LwIP-RESTclient/tcp_restclient.c **** }
+ 827              		.loc 1 308 1 view .LVU221
+ 828 0054 1AB0     		add	sp, sp, #104
+ 829              	.LCFI15:
+ 830              		.cfi_def_cfa_offset 16
+ 831              		@ sp needed
+ 832 0056 70BD     		pop	{r4, r5, r6, pc}
+ 833              	.L63:
+ 834              		.align	2
+ 835              	.L62:
+ 836 0058 00000000 		.word	.LC4
+ 837 005c 00000000 		.word	.LANCHOR1
+ 838 0060 00000000 		.word	.LANCHOR2
+ 839              		.cfi_endproc
+ 840              	.LFE174:
+ 842              		.global	pcbTx
+ 843              		.global	tsTx
+ 844              		.global	message_count
+ 845              		.section	.bss.message_count,"aw",%nobits
+ARM GAS  /tmp/cc22phhs.s 			page 24
+
+
+ 846              		.align	2
+ 847              		.set	.LANCHOR0,. + 0
+ 850              	message_count:
+ 851 0000 00000000 		.space	4
+ 852              		.section	.bss.pcbTx,"aw",%nobits
+ 853              		.align	2
+ 854              		.set	.LANCHOR2,. + 0
+ 857              	pcbTx:
+ 858 0000 00000000 		.space	4
+ 859              		.section	.bss.tsTx,"aw",%nobits
+ 860              		.align	2
+ 861              		.set	.LANCHOR1,. + 0
+ 864              	tsTx:
+ 865 0000 00000000 		.space	4
+ 866              		.text
+ 867              	.Letext0:
+ 868              		.file 2 "/usr/share/gcc-arm-none-eabi-10.3-2021.10/arm-none-eabi/include/machine/_default_types.h"
+ 869              		.file 3 "/usr/share/gcc-arm-none-eabi-10.3-2021.10/arm-none-eabi/include/sys/_stdint.h"
+ 870              		.file 4 "Middlewares/Third_Party/LwIP/src/include/lwip/arch.h"
+ 871              		.file 5 "Middlewares/Third_Party/LwIP/src/include/lwip/tcpbase.h"
+ 872              		.file 6 "Middlewares/Third_Party/LwIP/src/include/lwip/err.h"
+ 873              		.file 7 "Middlewares/Third_Party/LwIP/src/include/lwip/pbuf.h"
+ 874              		.file 8 "Middlewares/Third_Party/LwIP/src/include/lwip/ip4_addr.h"
+ 875              		.file 9 "Middlewares/Third_Party/LwIP/src/include/lwip/ip_addr.h"
+ 876              		.file 10 "Middlewares/Third_Party/LwIP/src/include/lwip/memp.h"
+ 877              		.file 11 "Middlewares/Third_Party/LwIP/src/include/lwip/tcp.h"
+ 878              		.file 12 "Middlewares/Third_Party/LwIP/src/include/lwip/mem.h"
+ 879              		.file 13 "/usr/share/gcc-arm-none-eabi-10.3-2021.10/arm-none-eabi/include/stdio.h"
+ 880              		.file 14 "<built-in>"
+ARM GAS  /tmp/cc22phhs.s 			page 25
+
+
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 tcp_restclient.c
+     /tmp/cc22phhs.s:20     .text.tcp_restclient_connection_close:0000000000000000 $t
+     /tmp/cc22phhs.s:25     .text.tcp_restclient_connection_close:0000000000000000 tcp_restclient_connection_close
+     /tmp/cc22phhs.s:89     .text.tcp_restclient_poll:0000000000000000 $t
+     /tmp/cc22phhs.s:94     .text.tcp_restclient_poll:0000000000000000 tcp_restclient_poll
+     /tmp/cc22phhs.s:169    .text.tcp_restclient_sent:0000000000000000 $t
+     /tmp/cc22phhs.s:174    .text.tcp_restclient_sent:0000000000000000 tcp_restclient_sent
+     /tmp/cc22phhs.s:239    .rodata.tcp_restclient_recv.str1.4:0000000000000000 $d
+     /tmp/cc22phhs.s:249    .text.tcp_restclient_recv:0000000000000000 $t
+     /tmp/cc22phhs.s:254    .text.tcp_restclient_recv:0000000000000000 tcp_restclient_recv
+     /tmp/cc22phhs.s:405    .text.tcp_restclient_recv:0000000000000080 $d
+     /tmp/cc22phhs.s:415    .text.tcp_restclient_send:0000000000000000 $t
+     /tmp/cc22phhs.s:420    .text.tcp_restclient_send:0000000000000000 tcp_restclient_send
+     /tmp/cc22phhs.s:526    .rodata.tcp_restclient_connected.str1.4:0000000000000000 $d
+     /tmp/cc22phhs.s:534    .text.tcp_restclient_connected:0000000000000000 $t
+     /tmp/cc22phhs.s:539    .text.tcp_restclient_connected:0000000000000000 tcp_restclient_connected
+     /tmp/cc22phhs.s:683    .text.tcp_restclient_connected:0000000000000094 $d
+     /tmp/cc22phhs.s:691    .text.tcp_restclient_connect:0000000000000000 $t
+     /tmp/cc22phhs.s:697    .text.tcp_restclient_connect:0000000000000000 tcp_restclient_connect
+     /tmp/cc22phhs.s:746    .text.tcp_restclient_connect:0000000000000020 $d
+     /tmp/cc22phhs.s:752    .rodata.test.str1.4:0000000000000000 $d
+     /tmp/cc22phhs.s:756    .text.test:0000000000000000 $t
+     /tmp/cc22phhs.s:762    .text.test:0000000000000000 test
+     /tmp/cc22phhs.s:836    .text.test:0000000000000058 $d
+     /tmp/cc22phhs.s:857    .bss.pcbTx:0000000000000000 pcbTx
+     /tmp/cc22phhs.s:864    .bss.tsTx:0000000000000000 tsTx
+     /tmp/cc22phhs.s:850    .bss.message_count:0000000000000000 message_count
+     /tmp/cc22phhs.s:846    .bss.message_count:0000000000000000 $d
+     /tmp/cc22phhs.s:853    .bss.pcbTx:0000000000000000 $d
+     /tmp/cc22phhs.s:860    .bss.tsTx:0000000000000000 $d
+
+UNDEFINED SYMBOLS
+tcp_arg
+tcp_sent
+tcp_recv
+tcp_err
+tcp_poll
+mem_free
+tcp_close
+tcp_abort
+tcp_recved
+pbuf_free
+printf
+pbuf_ref
+tcp_write
+mem_malloc
+memcpy
+strlen
+pbuf_alloc
+pbuf_take
+tcp_new
+tcp_connect
